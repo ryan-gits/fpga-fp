@@ -44,6 +44,8 @@ module fp_add (
   logic [7:0] sum_vld_sr;
 
   logic       final_sign;
+  logic       final_sign_q;
+  logic       final_sign_q2;
 
   assign a_exp = a[30:23];
   assign b_exp = b[30:23];
@@ -59,13 +61,10 @@ module fp_add (
   assign sum_vld = sum_vld_sr[$size(sum_vld_sr)-1];
 
   always_ff @(posedge clk) begin
+    a_sign_q           <= a[31];
+    b_sign_q           <= b[31];
     a_mant_q           <= a[22:0];
     b_mant_q           <= b[22:0];
-
-    a_sign_q           <= a[31];
-    a_sign_q2          <= a_sign_q;
-    b_sign_q           <= b[31];
-    b_sign_q2          <= b_sign_q;
 
     // 1, determine largest exp and difference between two
     if (a_exp >= b_exp) begin
@@ -79,28 +78,32 @@ module fp_add (
     end
 
     // 2, add implicit mantissa bit and normalize
-    exp_norm_q         <= exp_norm;
-    a_mant_norm        <= (a_exp_larger || exp_diff == 0)  ? {1'b1, a_mant_q} : {1'b1, a_mant_q} >> exp_diff;
-    b_mant_norm        <= (!a_exp_larger || exp_diff == 0) ? {1'b1, b_mant_q} : {1'b1, b_mant_q} >> exp_diff;
+    a_sign_q2   <= a_sign_q;
+    b_sign_q2   <= b_sign_q;
+    exp_norm_q  <= exp_norm;
+    a_mant_norm <= (a_exp_larger || exp_diff == 0)  ? {1'b1, a_mant_q} : {1'b1, a_mant_q} >> exp_diff;
+    b_mant_norm <= (!a_exp_larger || exp_diff == 0) ? {1'b1, b_mant_q} : {1'b1, b_mant_q} >> exp_diff;
 
     // Q0.23, mantissa sign conversion
     exp_norm_q2        <= exp_norm_q;
-    a_mant_norm_signed <= a_sign_q ? -a_mant_norm : a_mant_norm;
-    b_mant_norm_signed <= b_sign_q ? -b_mant_norm : b_mant_norm;
+    a_mant_norm_signed <= a_sign_q2 ? -a_mant_norm : a_mant_norm;
+    b_mant_norm_signed <= b_sign_q2 ? -b_mant_norm : b_mant_norm;
 
     // Q1.23
-    exp_norm_q3        <= exp_norm_q2;
-    sum_mant_signed    <= a_mant_norm_signed + b_mant_norm_signed;
-    final_sign         <= sum_mant_signed[25];
+    exp_norm_q3     <= exp_norm_q2;
+    final_sign      <= sum_mant_signed[25];
+    sum_mant_signed <= a_mant_norm_signed + b_mant_norm_signed;
 
     // Q2.23, q2 = overflow, q1 = implicit, convert to unsigned
-    exp_norm_q4        <= exp_norm_q3;
-    sum_mant_unsigned  <= sum_mant_signed[25] ? -sum_mant_signed : sum_mant_signed[24:0];
-    mant_ovfl          <= sum_mant_unsigned[24];
-    mant_implicit      <= sum_mant_unsigned[23];
-    sum_mant           <= sum_mant_unsigned[22:0];
+    final_sign_q      <= final_sign;
+    exp_norm_q4       <= exp_norm_q3;
+    sum_mant_unsigned <= sum_mant_signed[25] ? -sum_mant_signed : sum_mant_signed[24:0];
+    mant_ovfl         <= sum_mant_unsigned[24];
+    mant_implicit     <= sum_mant_unsigned[23];
+    sum_mant          <= sum_mant_unsigned[22:0];
 
     // normalize
+    final_sign_q2 <= final_sign_q;
     if (!mant_ovfl && !mant_implicit) begin
       exp_norm_adj <= exp_norm_q4 - 2;
       sum_mant_adj <= sum_mant << 2;
@@ -116,7 +119,7 @@ module fp_add (
     end
 
     // 4, carry/increment exponent and shift mantissa if implicit leading bit overflowed
-    sum <= {final_sign, exp_norm_adj, sum_mant_adj};
+    sum <= {final_sign_q2, exp_norm_adj, sum_mant_adj};
   end
 
 endmodule
