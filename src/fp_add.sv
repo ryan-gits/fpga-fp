@@ -57,10 +57,10 @@ module fp_add (
   assign sum_vld = sum_vld_sr[$size(sum_vld_sr)-1];
 
   always_ff @(posedge clk) begin
-    a_sign_q           <= a[31];
-    b_sign_q           <= b[31];
-    a_mant_q           <= a[22:0];
-    b_mant_q           <= b[22:0];
+    a_sign_q <= a[31];
+    b_sign_q <= b[31];
+    a_mant_q <= a[22:0];
+    b_mant_q <= b[22:0];
 
     // 1, determine largest exp and difference between two
     if (a_exp >= b_exp) begin
