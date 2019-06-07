@@ -30,7 +30,6 @@ module fp_add (
   logic [22:0] b_mant_q;
   logic [23:0] a_mant_norm;
   logic [23:0] b_mant_norm;
-  logic [22:0] sum_mant;
   logic [22:0] sum_mant_adj;
 
   logic signed [24:0] a_mant_norm_signed;
@@ -38,10 +37,7 @@ module fp_add (
   logic signed [25:0] sum_mant_signed;
   logic        [24:0] sum_mant_unsigned;
 
-  logic        mant_ovfl;
-  logic        mant_implicit;
-
-  logic [7:0] sum_vld_sr;
+  logic [6:0] sum_vld_sr;
 
   logic       final_sign;
   logic       final_sign_q;
@@ -54,7 +50,7 @@ module fp_add (
     if (rst) begin
       sum_vld_sr <= '0;
     end else begin
-       sum_vld_sr <= {sum_vld_sr[$size(sum_vld_sr)-2:0], in_vld};
+      sum_vld_sr <= {sum_vld_sr[$size(sum_vld_sr)-2:0], in_vld};
     end
   end
 
@@ -98,24 +94,21 @@ module fp_add (
     final_sign_q      <= final_sign;
     exp_norm_q4       <= exp_norm_q3;
     sum_mant_unsigned <= sum_mant_signed[25] ? -sum_mant_signed : sum_mant_signed[24:0];
-    mant_ovfl         <= sum_mant_unsigned[24];
-    mant_implicit     <= sum_mant_unsigned[23];
-    sum_mant          <= sum_mant_unsigned[22:0];
 
-    // normalize
+    // normalize, check for overflow [24] / implicit [23]
     final_sign_q2 <= final_sign_q;
-    if (!mant_ovfl && !mant_implicit) begin
+    if (!sum_mant_unsigned[24] && !sum_mant_unsigned[23]) begin
       exp_norm_adj <= exp_norm_q4 - 2;
-      sum_mant_adj <= sum_mant << 2;
-    end else if (!mant_implicit) begin
+      sum_mant_adj <= sum_mant_unsigned[22:0] << 2;
+    end else if (!sum_mant_unsigned[23]) begin
       exp_norm_adj <= exp_norm_q4 - 1;
-      sum_mant_adj <= sum_mant << 1;
-    end else if (mant_ovfl) begin
+      sum_mant_adj <= sum_mant_unsigned[22:0] << 1;
+    end else if (sum_mant_unsigned[24]) begin
       exp_norm_adj <= exp_norm_q4 + 1;
-      sum_mant_adj <= sum_mant >> 1;
+      sum_mant_adj <= sum_mant_unsigned[22:0] >> 1;
     end else begin
       exp_norm_adj <= exp_norm_q4;
-      sum_mant_adj <= sum_mant;
+      sum_mant_adj <= sum_mant_unsigned[22:0];
     end
 
     // 4, carry/increment exponent and shift mantissa if implicit leading bit overflowed
