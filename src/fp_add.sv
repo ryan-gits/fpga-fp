@@ -78,46 +78,47 @@ module fp_add (
     end
 
     // 2, add implicit mantissa bit and normalize
-    a_sign_q2          <= a_sign_q;
-    b_sign_q2          <= b_sign_q;
-    exp_norm_q         <= exp_norm;
-    a_mant_norm        <= (a_exp_larger || exp_diff == 0)  ? {1'b1, a_mant_q} : {1'b1, a_mant_q} >> exp_diff;
-    b_mant_norm        <= (!a_exp_larger || exp_diff == 0) ? {1'b1, b_mant_q} : {1'b1, b_mant_q} >> exp_diff;
+    a_sign_q2   <= a_sign_q;
+    b_sign_q2   <= b_sign_q;
+    exp_norm_q  <= exp_norm;
+    a_mant_norm <= (a_exp_larger  || exp_diff == 0) ? {1'b1, a_mant_q} : {1'b1, a_mant_q} >> exp_diff;
+    b_mant_norm <= (!a_exp_larger || exp_diff == 0) ? {1'b1, b_mant_q} : {1'b1, b_mant_q} >> exp_diff;
 
     // Q0.23, mantissa sign conversion
     exp_norm_q2        <= exp_norm_q;
     a_mant_norm_signed <= a_sign_q2 ? -a_mant_norm : a_mant_norm;
     b_mant_norm_signed <= b_sign_q2 ? -b_mant_norm : b_mant_norm;
 
-    // Q1.23
-    exp_norm_q3        <= exp_norm_q2;
-    final_sign         <= sum_mant_signed[25];
-    sum_mant_signed    <= a_mant_norm_signed + b_mant_norm_signed;
+    // Q1.23, perform signed mantissa addition
+    exp_norm_q3     <= exp_norm_q2;
+    final_sign      <= sum_mant_signed[$size(sub_mant_signed)-1];
+    sum_mant_signed <= a_mant_norm_signed + b_mant_norm_signed;
 
-    // Q2.23, q2 = overflow, q1 = implicit, convert to unsigned
-    final_sign_q       <= final_sign;
-    exp_norm_q4        <= exp_norm_q3;
-    sum_mant_unsigned  <= sum_mant_signed[25] ? -sum_mant_signed : sum_mant_signed[24:0];
+    // Q2.23, convert to unsigned, sum_mant_unsigned[24] = overflow, [23] = implicit
+    final_sign_q      <= final_sign;
+    exp_norm_q4       <= exp_norm_q3;
+    sum_mant_unsigned <= sum_mant_signed[$size(sub_mant_signed)-1] ? -sum_mant_signed : sum_mant_signed[$size(sub_mant_signed)-2:0];
 
     final_sign_q2 <= final_sign_q;
     // implicit bit or overflow not set, need to normalize
-    if (!sum_mant_unsigned[24] && !sum_mant_unsigned[23]) begin
-      // special case where mantissa is 0, set exponent to 0
-      if (sum_mant_unsigned[22:0] == '0) begin
+    if (!sum_mant_unsigned[$size(sub_mant_unsigned)-1] && !sum_mant_unsigned[$size(sub_mant_unsigned)-2]) begin
+      // special case where mantissa is 0, set exponent to 0, no valid shifts possible
+      if (sum_mant_unsigned[$size(sum_mant_adj)-1:0] == '0) begin
         sum_mant_adj <= '0;
         exp_norm_adj <= '0;
+      // find msb in mantissa, subtract that value from exponent and shift msb into implicit position
       end else begin
-        sum_mant_adj <= sum_mant_unsigned[22:0] << (23 - mant_msb);
-        exp_norm_adj <= exp_norm_q4 - (23 - mant_msb);
+        sum_mant_adj <= sum_mant_unsigned[$size(sub_mant_adj)-1:0] << ($size(sub_mant_adj) - mant_msb);
+        exp_norm_adj <= exp_norm_q4 - ($size(sub_mant_adj) - mant_msb);
       end
     // overflowed implicit, adjust exponent
-    end else if (sum_mant_unsigned[24]) begin
+    end else if (sum_mant_unsigned[$size(sub_mant_unsigned)-1]) begin
       exp_norm_adj <= exp_norm_q4 + 1;
-      sum_mant_adj <= sum_mant_unsigned[22:0] >> 1;
+      sum_mant_adj <= sum_mant_unsigned[$size(sub_mant_adj)-1:0] >> 1;
     // already normalized, implicit set, no overflow
     end else begin
       exp_norm_adj <= exp_norm_q4;
-      sum_mant_adj <= sum_mant_unsigned[22:0];
+      sum_mant_adj <= sum_mant_unsigned[$size(sub_mant_adj)-1:0];
     end
 
     // 4, carry/increment exponent and shift mantissa if implicit leading bit overflowed
@@ -128,8 +129,10 @@ module fp_add (
   always_comb begin
     mant_msb = 0;
 
-    for (int i = 0; i < $size(sum_mant_unsigned)-1; i++) begin
-      if (sum_mant_unsigned[i]) mant_msb = i;
+    for (int i = 0; i < $size(sum_mant_adj)-1; i++) begin
+      if (sum_mant_unsigned[i]) begin
+        mant_msb = i;
+      end
     end
   end
 
